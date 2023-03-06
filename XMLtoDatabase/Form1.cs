@@ -18,6 +18,7 @@ namespace XMLtoDatabase
     {
         // Getting connection string from App.config file
         string StrCon = ConfigurationManager.ConnectionStrings["strcon"].ToString();
+        List<string> xmlFiles = new List<string>();
 
         public Form1()
         {
@@ -27,52 +28,70 @@ namespace XMLtoDatabase
         // File Browser Button Click
         private void btnBrowse_Click(object sender, EventArgs e)
         {
-            if (OFD.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-                txtFilePath.Text = OFD.FileName;
+            string message = "Selected files:\n";
+			//if (OFD.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+			//    txtFilePath.Text = OFD.FileName;
+			if (OFD.ShowDialog() == DialogResult.OK)
+			{
+				foreach (string file in OFD.FileNames)
+				{
+					message += $"{file} {Environment.NewLine}";
+                    xmlFiles.Add(file);
+				}
+				MessageBox.Show(message);
+			}  
 
-        }
+		}
 
         private void btnImport_Click(object sender, EventArgs e)
         {
-            string XMlFile = txtFilePath.Text;
-            if (File.Exists(XMlFile))
-            {
-                // Conversion Xml file to DataTable
-                DataTable dt = CreateDataTableXML(XMlFile);
-                if (dt.Columns.Count == 0)
-                    dt.ReadXml(XMlFile);
+			//TODO: insert code to loop through xmlFiles List (or probably no need na and just use OFD.FileNames)
+            //Used the populated list instead coz para sure duh
+			foreach (string file in xmlFiles)
+			{
+                string XMlFile = file;
 
-                // Creating Query for Table Creation
-                string Query = CreateTableQuery(dt);
-                SqlConnection con = new SqlConnection(StrCon);
-                con.Open();
-
-                // Deletion of Table if already Exist
-                SqlCommand cmd = new SqlCommand("IF OBJECT_ID('dbo." + dt.TableName + "', 'U') IS NOT NULL DROP TABLE dbo." + dt.TableName + ";", con);
-                cmd.ExecuteNonQuery();
-
-                // Table Creation
-                cmd = new SqlCommand(Query, con);
-                int check = cmd.ExecuteNonQuery();
-                if (check != 0)
+				if (File.Exists(XMlFile))
                 {
-                // Copy Data from DataTable to Sql Table
-                using (var bulkCopy = new SqlBulkCopy(con.ConnectionString, SqlBulkCopyOptions.KeepIdentity))
-                {
-                    // my DataTable column names match my SQL Column names, so I simply made this loop. However if your column names don't match, just pass in which datatable name matches the SQL column name in Column Mappings
-                    foreach (DataColumn col in dt.Columns)
+                    // Conversion Xml file to DataTable
+                    DataTable dt = CreateDataTableXML(XMlFile);
+                    if (dt.Columns.Count == 0)
+                        dt.ReadXml(XMlFile);
+
+                    //TODO: Insert code that checks database if table is existing. If yes, then use Insert Into query. If not, use create table query
+                    // Creating Query for Table Creation
+                    string Query = CreateTableQuery(dt);
+                    SqlConnection con = new SqlConnection(StrCon);
+                    con.Open();
+
+                    //TODO: Update Code to use INSERT INTO query when table is existing
+                    // Deletion of Table if already Exist
+                    SqlCommand cmd = new SqlCommand("IF OBJECT_ID('dbo." + dt.TableName + "', 'U') IS NOT NULL DROP TABLE dbo." + dt.TableName + ";", con);
+                    cmd.ExecuteNonQuery();
+
+                    // Table Creation
+                    cmd = new SqlCommand(Query, con);
+                    int check = cmd.ExecuteNonQuery();
+                    if (check != 0)
                     {
-                        bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
+                        // Copy Data from DataTable to Sql Table
+                        using (var bulkCopy = new SqlBulkCopy(con.ConnectionString, SqlBulkCopyOptions.KeepIdentity))
+                        {
+                            // my DataTable column names match my SQL Column names, so I simply made this loop. However if your column names don't match, just pass in which datatable name matches the SQL column name in Column Mappings
+                            foreach (DataColumn col in dt.Columns)
+                            {
+                                bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
+                            }
+
+                            bulkCopy.BulkCopyTimeout = 600;
+                            bulkCopy.DestinationTableName = dt.TableName;
+                            bulkCopy.WriteToServer(dt);
+                        }
+
+                        MessageBox.Show("Table Created Successfully");
                     }
-
-                    bulkCopy.BulkCopyTimeout = 600;
-                    bulkCopy.DestinationTableName = dt.TableName;
-                    bulkCopy.WriteToServer(dt);
+                    con.Close();
                 }
-
-                    MessageBox.Show("Table Created Successfully");
-                }
-                con.Close();
             }
 
         }
@@ -85,6 +104,8 @@ namespace XMLtoDatabase
 
             return TableName;
         }
+        
+        //TODO: Create Query for INSERT INTO table
 
         // Getting Query for Table Creation
         public string CreateTableQuery(DataTable table)
@@ -144,21 +165,21 @@ namespace XMLtoDatabase
             try
             {
                 Dt.TableName = GetTableName(XmlFile);
-                XmlNode NodoEstructura = doc.DocumentElement.ChildNodes.Cast<XmlNode>().ToList()[0];
-                progressBar1.Maximum = NodoEstructura.ChildNodes.Count;
+                XmlNode Nodes = doc.DocumentElement.ChildNodes.Cast<XmlNode>().ToList()[0];
+                progressBar1.Maximum = Nodes.ChildNodes.Count;
                 progressBar1.Value = 0;
-                foreach (XmlNode columna in NodoEstructura.ChildNodes)
+                foreach (XmlNode column in Nodes.ChildNodes)
                 {
-                    Dt.Columns.Add(columna.Name, typeof(String));
+                    Dt.Columns.Add(column.Name, typeof(String));
                     Progress();
                 }
 
-                XmlNode Filas = doc.DocumentElement;
-                progressBar1.Maximum = Filas.ChildNodes.Count;
+                XmlNode File = doc.DocumentElement;
+                progressBar1.Maximum = File.ChildNodes.Count;
                 progressBar1.Value = 0;
-                foreach (XmlNode Fila in Filas.ChildNodes)
+                foreach (XmlNode file in File.ChildNodes)
                 {
-                    List<string> Valores = Fila.ChildNodes.Cast<XmlNode>().ToList().Select(x => x.InnerText).ToList();
+                    List<string> Valores = file.ChildNodes.Cast<XmlNode>().ToList().Select(x => x.InnerText).ToList();
                     Dt.Rows.Add(Valores.ToArray());
                     Progress();
                 }

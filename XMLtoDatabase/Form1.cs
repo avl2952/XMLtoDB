@@ -35,7 +35,7 @@ namespace XMLtoDatabase
 			{
 				foreach (string file in OFD.FileNames)
 				{
-					message += $"{file} {Environment.NewLine}";
+					message += $"{Path.GetFileName(file)} {Environment.NewLine}";
                     xmlFiles.Add(file);
 				}
 				MessageBox.Show(message);

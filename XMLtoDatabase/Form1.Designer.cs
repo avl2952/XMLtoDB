@@ -43,7 +43,7 @@
 			this.btnImport.TabIndex = 0;
 			this.btnImport.Text = "Import";
 			this.btnImport.UseVisualStyleBackColor = true;
-			this.btnImport.Click += new System.EventHandler(this.btnImport_Click);
+			this.btnImport.Click += new System.EventHandler(this.BtnImport_Click);
 			// 
 			// txtFilePath
 			// 
@@ -60,7 +60,7 @@
 			this.btnBrowse.TabIndex = 2;
 			this.btnBrowse.Text = "Browse..";
 			this.btnBrowse.UseVisualStyleBackColor = true;
-			this.btnBrowse.Click += new System.EventHandler(this.btnBrowse_Click);
+			this.btnBrowse.Click += new System.EventHandler(this.BtnBrowse_Click);
 			// 
 			// progressBar1
 			// 

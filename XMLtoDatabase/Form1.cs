@@ -1,11 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
 using System.Data;
 using System.Drawing;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.IO;
 using System.Data.SqlClient;
@@ -16,19 +13,30 @@ namespace XMLtoDatabase
 {
     public partial class Form1 : Form
     {
-        // Getting connection string from App.config file
-        string StrCon = ConfigurationManager.ConnectionStrings["strcon"].ToString();
-        List<string> xmlFiles = new List<string>();
 
-        public Form1()
+		#region Declarations
+
+		// Getting connection string from App.config file
+		string StrCon = ConfigurationManager.ConnectionStrings["strcon"].ToString();
+		private List<string> _xmlFiles = new List<string>();
+
+		#endregion Declarations
+
+		#region Constructor
+		public Form1()
         {
             InitializeComponent();
         }
+		#endregion Constructor
 
-        // File Browser Button Click
-        private void btnBrowse_Click(object sender, EventArgs e)
+		#region Event Methods
+
+		//TODO: Optimize code to be able to add more files anytime unless import button is clicked;
+		//FileExplorer browser
+		private void BtnBrowse_Click(object sender, EventArgs e)
         {
             string message = "Selected files:\n";
+            string txtBox = "";
 			//if (OFD.ShowDialog() == System.Windows.Forms.DialogResult.OK)
 			//    txtFilePath.Text = OFD.FileName;
 			if (OFD.ShowDialog() == DialogResult.OK)
@@ -36,18 +44,19 @@ namespace XMLtoDatabase
 				foreach (string file in OFD.FileNames)
 				{
 					message += $"{Path.GetFileName(file)} {Environment.NewLine}";
-                    xmlFiles.Add(file);
+					txtBox += $"{Path.GetFileName(file)}, ";
+                    _xmlFiles.Add(file);
 				}
 				MessageBox.Show(message);
-			}  
-
+			}
+            txtFilePath.Text = txtBox;
 		}
 
-        private void btnImport_Click(object sender, EventArgs e)
+		private void BtnImport_Click(object sender, EventArgs e)
         {
-			//TODO: insert code to loop through xmlFiles List (or probably no need na and just use OFD.FileNames)
-            //Used the populated list instead coz para sure duh
-			foreach (string file in xmlFiles)
+			//TODO: insert code to loop through xmlFiles List (or probably no need na? and just use OFD.FileNames) 
+			//Used the populated list instead coz para sure duh -- done
+			foreach (string file in _xmlFiles)
 			{
                 string XMlFile = file;
 
@@ -58,59 +67,86 @@ namespace XMLtoDatabase
                     if (dt.Columns.Count == 0)
                         dt.ReadXml(XMlFile);
 
-                    //TODO: Insert code that checks database if table is existing. If yes, then use Insert Into query. If not, use create table query
-                    // Creating Query for Table Creation
-                    string Query = CreateTableQuery(dt);
-                    SqlConnection con = new SqlConnection(StrCon);
-                    con.Open();
-
-                    //TODO: Update Code to use INSERT INTO query when table is existing
-                    // Deletion of Table if already Exist
-                    SqlCommand cmd = new SqlCommand("IF OBJECT_ID('dbo." + dt.TableName + "', 'U') IS NOT NULL DROP TABLE dbo." + dt.TableName + ";", con);
-                    cmd.ExecuteNonQuery();
-
-                    // Table Creation
-                    cmd = new SqlCommand(Query, con);
-                    int check = cmd.ExecuteNonQuery();
-                    if (check != 0)
+                    //Checks existing table
+                    if (!IsTableExisting())
                     {
-                        // Copy Data from DataTable to Sql Table
-                        using (var bulkCopy = new SqlBulkCopy(con.ConnectionString, SqlBulkCopyOptions.KeepIdentity))
-                        {
-                            // my DataTable column names match my SQL Column names, so I simply made this loop. However if your column names don't match, just pass in which datatable name matches the SQL column name in Column Mappings
-                            foreach (DataColumn col in dt.Columns)
-                            {
-                                bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
-                            }
+						// Creating Query for Table Creation
+						string Query = CreateTableQuery(dt);
+						SqlConnection con = new SqlConnection(StrCon);
+						con.Open();
 
-                            bulkCopy.BulkCopyTimeout = 600;
-                            bulkCopy.DestinationTableName = dt.TableName;
-                            bulkCopy.WriteToServer(dt);
-                        }
+						//TODO: Update Code to use INSERT INTO query when table is existing
+						// Deletion of Table if already Exist
+						SqlCommand cmd = new SqlCommand("IF OBJECT_ID('dbo." + dt.TableName + "', 'U') IS NOT NULL DROP TABLE dbo." + dt.TableName + ";", con);
+						cmd.ExecuteNonQuery();
 
-                        MessageBox.Show("Table Created Successfully");
-                    }
-                    con.Close();
+						// Table Creation
+						cmd = new SqlCommand(Query, con);
+						int check = cmd.ExecuteNonQuery();
+						if (check != 0)
+						{
+							// Copy Data from DataTable to Sql Table
+							using (var bulkCopy = new SqlBulkCopy(con.ConnectionString, SqlBulkCopyOptions.KeepIdentity))
+							{
+								// assuming DataTable column names match SQL Column names. However if column names don't match, just pass in which datatable name matches the SQL column name in Column Mappings
+								foreach (DataColumn col in dt.Columns)
+								{
+                                    //TODO: refactor mapping
+									bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
+								}
+
+								bulkCopy.BulkCopyTimeout = 600;
+								bulkCopy.DestinationTableName = dt.TableName;
+								bulkCopy.WriteToServer(dt);
+							}
+
+							MessageBox.Show("Table Created Successfully"); //TODO: maka one for insert into
+						}
+						con.Close();
+					}
+                    
                 }
             }
 
         }
 
-        // Getting Table Name as Per the Xml File Name
-        public string GetTableName(string file)
+		#endregion Event Methods
+
+		#region  SQL Methods
+
+        /// <summary>
+        /// Checks if table is existing
+        /// </summary>
+		private bool IsTableExisting() 
+		{
+			//TODO: Insert code that checks database if table is existing. If yes, then use Insert Into query. If not, use create table query
+			throw new NotImplementedException();
+		}
+
+		// Getting Table Name as Per the Xml File Name
+		//TODO: Might not be necessary? Let's Just add another input to ask for a table name
+		//and probably database conn details so that we can configure it dynamically? or no?
+		public string GetTableName(string file)
         {
             FileInfo fi = new FileInfo(file);
             string TableName = fi.Name.Replace(fi.Extension, "");
 
             return TableName;
         }
-        
+
         //TODO: Create Query for INSERT INTO table
+        public string CreateInsertInto(DataTable table)
+        {
+            string query= $"CREATE TABLE {table.TableName}(";
+            //Do something
+            return query;
+            
+        }
 
         // Getting Query for Table Creation
         public string CreateTableQuery(DataTable table)
         {
-            string sqlsc = "CREATE TABLE " + table.TableName + "(";
+            string sqlsc = $"CREATE TABLE " + table.TableName + "(";
             progressBar1.Maximum = table.Columns.Count;
             progressBar1.Value = 0;
             for (int i = 0; i < table.Columns.Count; i++)
@@ -153,8 +189,11 @@ namespace XMLtoDatabase
             return sqlsc.Substring(0, sqlsc.Length - 1) + "\n)";
         }
 
-        // Conversion Xml file to DataTable
-        public DataTable CreateDataTableXML(string XmlFile)
+		#endregion  SQL Methods
+
+		#region XML Methods
+		// Conversion Xml file to DataTable
+		public DataTable CreateDataTableXML(string XmlFile)
         {
             XmlDocument doc = new XmlDocument();
 
@@ -186,13 +225,16 @@ namespace XMLtoDatabase
             }
             catch (Exception ex)
             {
-
+                MessageBox.Show(ex.Message);
             }
             return Dt;
         }
 
-        // Show Progress Bar
-        public void Progress()
+		#endregion XML Methods
+
+		#region UI
+		// Show Progress Bar
+		public void Progress()
         {
             if (progressBar1.Value < progressBar1.Maximum)
             {
@@ -203,7 +245,6 @@ namespace XMLtoDatabase
                 Application.DoEvents();
             }
         }
-
-
-    }
+		#endregion UI
+	}
 }

@@ -67,43 +67,49 @@ namespace XMLtoDatabase
                     if (dt.Columns.Count == 0)
                         dt.ReadXml(XMlFile);
 
+                    string Query;
+
                     //Checks existing table
                     if (!IsTableExisting())
                     {
-						// Creating Query for Table Creation
-						string Query = CreateTableQuery(dt);
-						SqlConnection con = new SqlConnection(StrCon);
-						con.Open();
+                        // Creating Query for Table Creation
+                        Query = CreateTableQuery(dt);
+                    }
+                    else
+                    {
+						Query = CreateInsertIntoQuery(dt);
+					}
 
-						//TODO: Update Code to use INSERT INTO query when table is existing
-						// Deletion of Table if already Exist
-						SqlCommand cmd = new SqlCommand("IF OBJECT_ID('dbo." + dt.TableName + "', 'U') IS NOT NULL DROP TABLE dbo." + dt.TableName + ";", con);
-						cmd.ExecuteNonQuery();
+					SqlConnection con = new SqlConnection(StrCon);
+					con.Open();
 
-						// Table Creation
-						cmd = new SqlCommand(Query, con);
-						int check = cmd.ExecuteNonQuery();
-						if (check != 0)
+					//// Deletion of Table if already Exist
+					//SqlCommand cmd = new SqlCommand("IF OBJECT_ID('dbo." + dt.TableName + "', 'U') IS NOT NULL DROP TABLE dbo." + dt.TableName + ";", con);
+					//cmd.ExecuteNonQuery();
+
+					// Proceed to perform query
+					SqlCommand cmd = new SqlCommand(Query, con);
+					//int check = cmd.ExecuteNonQuery();
+					if (cmd.ExecuteNonQuery() != 0)
+					{
+						// Copy Data from DataTable to Sql Table
+						using (var bulkCopy = new SqlBulkCopy(con.ConnectionString, SqlBulkCopyOptions.KeepIdentity))
 						{
-							// Copy Data from DataTable to Sql Table
-							using (var bulkCopy = new SqlBulkCopy(con.ConnectionString, SqlBulkCopyOptions.KeepIdentity))
+							// assuming DataTable column names match SQL Column names. However if column names don't match, just pass in which datatable name matches the SQL column name in Column Mappings
+							foreach (DataColumn col in dt.Columns)
 							{
-								// assuming DataTable column names match SQL Column names. However if column names don't match, just pass in which datatable name matches the SQL column name in Column Mappings
-								foreach (DataColumn col in dt.Columns)
-								{
-                                    //TODO: refactor mapping
-									bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
-								}
-
-								bulkCopy.BulkCopyTimeout = 600;
-								bulkCopy.DestinationTableName = dt.TableName;
-								bulkCopy.WriteToServer(dt);
+                                //TODO: refactor mapping
+								bulkCopy.ColumnMappings.Add(col.ColumnName, col.ColumnName);
 							}
 
-							MessageBox.Show("Table Created Successfully"); //TODO: maka one for insert into
+							bulkCopy.BulkCopyTimeout = 600;
+							bulkCopy.DestinationTableName = dt.TableName;
+							bulkCopy.WriteToServer(dt);
 						}
-						con.Close();
+
+						MessageBox.Show("Table Created Successfully"); //TODO: maka one for insert into
 					}
+					con.Close();
                     
                 }
             }
@@ -119,8 +125,9 @@ namespace XMLtoDatabase
         /// </summary>
 		private bool IsTableExisting() 
 		{
-			//TODO: Insert code that checks database if table is existing. If yes, then use Insert Into query. If not, use create table query
-			throw new NotImplementedException();
+            //TODO: Insert code that checks database if table is existing. If yes, then use Insert Into query. If not, use create table query
+            //throw new NotImplementedException();
+            return true;
 		}
 
 		// Getting Table Name as Per the Xml File Name
@@ -128,26 +135,70 @@ namespace XMLtoDatabase
 		//and probably database conn details so that we can configure it dynamically? or no?
 		public string GetTableName(string file)
         {
+            //TODO:  change into a standard naming where we will use string.Contains() to look for key to know which table name to use
+            //Option 1: Loop list and perform a string.Contains() ---> downside, we have to manually update list/dictionary if there is new company
+            //or if naming is constant, extract comp name using substring then list.Any()
+            Dictionary<string, string> CompanyDirectory = new Dictionary<string, string>();
             FileInfo fi = new FileInfo(file);
+
             string TableName = fi.Name.Replace(fi.Extension, "");
+
 
             return TableName;
         }
 
         //TODO: Create Query for INSERT INTO table
-        public string CreateInsertInto(DataTable table)
+        public string CreateInsertIntoQuery(DataTable table)
         {
-            string query= $"CREATE TABLE {table.TableName}(";
-            //Do something
-            return query;
-            
-        }
+            string query = $"INSERT INTO {table.TableName}(";
+			progressBar1.Maximum = table.Columns.Count; //TODO: Modify for multiple files coz currently just for one file only
+			progressBar1.Value = 0;
+			for (int i = 0; i < table.Columns.Count; i++)
+			{
+				query += "[" + table.Columns[i].ColumnName + "]";
+				string columnType = table.Columns[i].DataType.ToString();
+				switch (columnType)
+				{
+					case "System.Int32":
+						query += " int ";
+						break;
+					case "System.Int64":
+						query += " bigint ";
+						break;
+					case "System.Int16":
+						query += " smallint";
+						break;
+					case "System.Byte":
+						query += " tinyint";
+						break;
+					case "System.Decimal":
+						query += " decimal ";
+						break;
+					case "System.DateTime":
+						query += " datetime ";
+						break;
+					case "System.String":
+					default:
+						query += string.Format(" nvarchar({0}) ", table.Columns[i].MaxLength == -1 ? "max" : table.Columns[i].MaxLength.ToString());
+						break;
+				}
+				if (table.Columns[i].AutoIncrement)
+					query += " IDENTITY(" + table.Columns[i].AutoIncrementSeed.ToString() + "," + table.Columns[i].AutoIncrementStep.ToString() + ") ";
+				if (!table.Columns[i].AllowDBNull)
+					query += " NOT NULL ";
+				query += ",";
+
+				Progress();
+			}
+			return query.Substring(0, query.Length - 1) + "\n)";
+
+		}
 
         // Getting Query for Table Creation
         public string CreateTableQuery(DataTable table)
         {
             string sqlsc = $"CREATE TABLE " + table.TableName + "(";
-            progressBar1.Maximum = table.Columns.Count;
+            progressBar1.Maximum = table.Columns.Count; //TODO: Modify for multiple files coz currently just for one file only
             progressBar1.Value = 0;
             for (int i = 0; i < table.Columns.Count; i++)
             {
@@ -192,7 +243,7 @@ namespace XMLtoDatabase
 		#endregion  SQL Methods
 
 		#region XML Methods
-		// Conversion Xml file to DataTable
+		// Converst Xml file to DataTable
 		public DataTable CreateDataTableXML(string XmlFile)
         {
             XmlDocument doc = new XmlDocument();
@@ -203,8 +254,8 @@ namespace XMLtoDatabase
 
             try
             {
-                Dt.TableName = GetTableName(XmlFile);
-                XmlNode Nodes = doc.DocumentElement.ChildNodes.Cast<XmlNode>().ToList()[0];
+                Dt.TableName = GetTableName(XmlFile);  //--------> do we need do we need?
+                XmlNode Nodes = doc.DocumentElement.ChildNodes.Cast<XmlNode>().ToList()[0]; //---for
                 progressBar1.Maximum = Nodes.ChildNodes.Count;
                 progressBar1.Value = 0;
                 foreach (XmlNode column in Nodes.ChildNodes)
